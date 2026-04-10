@@ -1,0 +1,20 @@
+# MentalMapping Phase 1 — Google Sheets 接続設定
+#
+# credentials_path は Google Cloud Console で発行した
+# サービスアカウント JSON のパスを指定する。
+# spreadsheet_id はスプレッドシート URL の /d/<id>/ 部分。
+# サービスアカウントのメールアドレスをスプレッドシートに「編集者」で共有しておくこと。
+
+google_sheets:
+  spreadsheet_id: "REPLACE_WITH_YOUR_SPREADSHEET_ID"
+  sheet_name: "mood_log"
+  credentials_path: "config/credentials.json"
+
+# mood_log のカラム順（参考・実装で使用はしない）
+mood_log_columns:
+  - date
+  - mood_score
+  - sleep_hours
+  - went_outside
+  - memo
+  - recorded_at

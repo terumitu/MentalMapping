@@ -1,0 +1,5 @@
+gspread>=6.0
+streamlit>=1.30
+plotly>=5.18
+pyyaml>=6.0
+pytest>=8.0
