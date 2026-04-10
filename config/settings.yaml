@@ -6,7 +6,7 @@
 # サービスアカウントのメールアドレスをスプレッドシートに「編集者」で共有しておくこと。
 
 google_sheets:
-  spreadsheet_id: "REPLACE_WITH_YOUR_SPREADSHEET_ID"
+  spreadsheet_id: "1S0cWK_0WIrxit8Yi0eK7Ocb-JHF99AsfxDCGPd0Hqao"
   sheet_name: "mood_log"
   credentials_path: "config/credentials.json"
 
