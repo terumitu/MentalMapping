@@ -1,5 +1,6 @@
 .streamlit/secrets.toml
 config/credentials.json
+config/credentials.json.json
 __pycache__/
 *.pyc
 .pytest_cache/
