@@ -11,10 +11,16 @@ google_sheets:
   credentials_path: "config/credentials.json"
 
 # mood_log のカラム順（参考・実装で使用はしない）
+# v2 仕様 (5段階 8項目): date + mood/energy/thinking/focus (1-5 必須) +
+#   sleep_hours / weather / medication / period (任意) + recorded_at
 mood_log_columns:
   - date
-  - mood_score
+  - mood
+  - energy
+  - thinking
+  - focus
   - sleep_hours
-  - went_outside
-  - memo
+  - weather
+  - medication
+  - period
   - recorded_at

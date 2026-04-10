@@ -1,10 +1,17 @@
-"""mood_log シートからの読み込み・集計レイヤ。
+"""mood_log シートからの読み込み・集計レイヤ (v2 仕様 / 5段階 8項目)。
+
+カラム順:
+    date / mood / energy / thinking / focus /
+    sleep_hours / weather / medication / period / recorded_at
 
 同日複数レコードは recorded_at が最も新しい 1 件のみを採用する。
 """
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Protocol
+
+NUMERIC_FIELDS = ("mood", "energy", "thinking", "focus", "sleep_hours")
+SCORE_FIELDS = ("mood", "energy", "thinking", "focus")
 
 
 class Worksheet(Protocol):
@@ -22,19 +29,33 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 
-def _to_int(value: Any) -> Optional[int]:
-    f = _to_float(value)
-    if f is None:
+def _to_bool(value: Any) -> Optional[bool]:
+    """True/False/None を返す。空セルは None。"""
+    if value is None or value == "":
         return None
-    return int(f)
-
-
-def _to_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
-    if value is None:
+    s = str(value).strip().lower()
+    if s in {"true", "1", "yes", "y"}:
+        return True
+    if s in {"false", "0", "no", "n"}:
         return False
-    return str(value).strip().lower() in {"true", "1", "yes", "y"}
+    return None
+
+
+def _empty_agg() -> Dict[str, Any]:
+    return {"count": 0, "mean": None, "min": None, "max": None}
+
+
+def _agg(values: List[float]) -> Dict[str, Any]:
+    if not values:
+        return _empty_agg()
+    return {
+        "count": len(values),
+        "mean": round(sum(values) / len(values), 4),
+        "min": min(values),
+        "max": max(values),
+    }
 
 
 class LogReader:
@@ -43,8 +64,10 @@ class LogReader:
     def __init__(self, worksheet: Worksheet) -> None:
         self._worksheet = worksheet
 
+    # ---- fetch ---------------------------------------------------------
+
     def fetch_all(self) -> List[Dict[str, Any]]:
-        """全行を辞書リストで返す（加工なし・順序保持）。"""
+        """全行を辞書リストで返す (加工なし・順序保持)。"""
         return list(self._worksheet.get_all_records())
 
     def fetch_latest_per_day(self) -> List[Dict[str, Any]]:
@@ -62,47 +85,58 @@ class LogReader:
                 latest[date] = rec
         return [latest[d] for d in sorted(latest.keys())]
 
-    def aggregate_mood(self) -> Dict[str, Any]:
-        """mood_score の基本集計（count / mean / min / max）。
+    # ---- aggregates (numeric) ------------------------------------------
 
-        同日複数記録は fetch_latest_per_day 基準で集計する。
-        """
+    def _collect_numeric(self, field: str) -> List[float]:
         records = self.fetch_latest_per_day()
-        scores: List[float] = []
+        out: List[float] = []
         for rec in records:
-            v = _to_float(rec.get("mood_score"))
+            v = _to_float(rec.get(field))
             if v is not None:
-                scores.append(v)
-        if not scores:
-            return {"count": 0, "mean": None, "min": None, "max": None}
-        return {
-            "count": len(scores),
-            "mean": round(sum(scores) / len(scores), 4),
-            "min": min(scores),
-            "max": max(scores),
-        }
+                out.append(v)
+        return out
+
+    def aggregate_mood(self) -> Dict[str, Any]:
+        return _agg(self._collect_numeric("mood"))
+
+    def aggregate_energy(self) -> Dict[str, Any]:
+        return _agg(self._collect_numeric("energy"))
+
+    def aggregate_thinking(self) -> Dict[str, Any]:
+        return _agg(self._collect_numeric("thinking"))
+
+    def aggregate_focus(self) -> Dict[str, Any]:
+        return _agg(self._collect_numeric("focus"))
 
     def aggregate_sleep(self) -> Dict[str, Any]:
-        """sleep_hours の基本集計。"""
-        records = self.fetch_latest_per_day()
-        hours: List[float] = []
-        for rec in records:
-            v = _to_float(rec.get("sleep_hours"))
-            if v is not None:
-                hours.append(v)
-        if not hours:
-            return {"count": 0, "mean": None, "min": None, "max": None}
-        return {
-            "count": len(hours),
-            "mean": round(sum(hours) / len(hours), 4),
-            "min": min(hours),
-            "max": max(hours),
-        }
+        return _agg(self._collect_numeric("sleep_hours"))
 
-    def outside_ratio(self) -> Optional[float]:
-        """went_outside == True の比率（0.0-1.0）。レコードが無ければ None。"""
+    # ---- ratios / distribution (optional fields) -----------------------
+
+    def _bool_ratio(self, field: str) -> Optional[float]:
         records = self.fetch_latest_per_day()
-        if not records:
+        bools = [_to_bool(r.get(field)) for r in records]
+        bools = [b for b in bools if b is not None]
+        if not bools:
             return None
-        outside = sum(1 for r in records if _to_bool(r.get("went_outside")))
-        return round(outside / len(records), 4)
+        return round(sum(1 for b in bools if b) / len(bools), 4)
+
+    def medication_ratio(self) -> Optional[float]:
+        """medication == True の比率 (0.0-1.0)。記録なしは None。"""
+        return self._bool_ratio("medication")
+
+    def period_ratio(self) -> Optional[float]:
+        """period == True の比率 (0.0-1.0)。記録なしは None。"""
+        return self._bool_ratio("period")
+
+    def weather_distribution(self) -> Dict[str, int]:
+        """weather 値の出現回数 (空セルは除外)。"""
+        records = self.fetch_latest_per_day()
+        dist: Dict[str, int] = {}
+        for r in records:
+            w = r.get("weather")
+            if w is None or w == "":
+                continue
+            key = str(w)
+            dist[key] = dist.get(key, 0) + 1
+        return dist
