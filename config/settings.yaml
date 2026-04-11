@@ -7,20 +7,39 @@
 
 google_sheets:
   spreadsheet_id: "1S0cWK_0WIrxit8Yi0eK7Ocb-JHF99AsfxDCGPd0Hqao"
-  sheet_name: "mood_log"
+  sheet_name: "mood_log"  # users 未指定時のフォールバック
   credentials_path: "config/credentials.json"
 
-# mood_log のカラム順（参考・実装で使用はしない）
-# v2 仕様 (5段階 8項目): date + mood/energy/thinking/focus (1-5 必須) +
-#   sleep_hours / weather / medication / period (任意) + recorded_at
+# マルチユーザー対応: ユーザーごとに別シートへ記録する
+# default_user は起動時の初期選択。users に存在しないキーは google_sheets.sheet_name にフォールバック。
+users:
+  masuda:
+    display_name: "増田舞"
+    sheet_name: "mood_log_masuda"
+  nishide:
+    display_name: "西出朋起"
+    sheet_name: "mood_log_nishide"
+default_user: "masuda"
+
+# 記録時刻から morning / evening を判定する境界（JST）
+# morning_start <= now < evening_start → "morning"、それ以外 → "evening"
+time_of_day:
+  morning_start: "05:30"
+  evening_start: "15:31"
+
+# mood_log のカラム順（Google Sheets 実シート準拠・A〜K）
+# v2 仕様 (5段階 4項目 必須 + 任意4項目 + 自動2項目)
+#   A:date B:mood C:energy D:thinking E:focus F:sleep_hours
+#   G:weather H:medication I:period J:recorded_at K:time_of_day
 mood_log_columns:
-  - date
-  - mood
-  - energy
-  - thinking
-  - focus
-  - sleep_hours
-  - weather
-  - medication
-  - period
-  - recorded_at
+  - date          # A
+  - mood          # B (int 1-5)
+  - energy        # C (int 1-5)
+  - thinking      # D (int 1-5)
+  - focus         # E (int 1-5)
+  - sleep_hours   # F (float)
+  - weather       # G (晴/曇/雨)
+  - medication    # H (bool)
+  - period        # I (bool)
+  - recorded_at   # J (JST 自動)
+  - time_of_day   # K (morning/evening 自動)

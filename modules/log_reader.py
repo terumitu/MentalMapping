@@ -1,9 +1,13 @@
-"""mood_log シートからの読み込み・集計レイヤ (v2 仕様 / 5段階 8項目)。
+"""mood-log シートからの読み込み・集計レイヤ (Google Sheets 実スキーマ A〜K 準拠)。
 
-カラム順:
-    date / mood / energy / thinking / focus /
-    sleep_hours / weather / medication / period / recorded_at
+カラム順 (A〜K):
+    A:date B:mood C:energy D:thinking E:focus F:sleep_hours
+    G:weather H:medication I:period J:recorded_at K:time_of_day
 
+本モジュールはシート名を保持せず、呼び出し側が解決した Worksheet を
+Worksheet Protocol 経由で注入する。マルチユーザー運用では
+ユーザーごとに別シートの Worksheet を差し替えて使う。get_all_records
+はヘッダ行キーで dict を返すので、列位置の変更には影響されない。
 同日複数レコードは recorded_at が最も新しい 1 件のみを採用する。
 """
 from __future__ import annotations
@@ -59,7 +63,7 @@ def _agg(values: List[float]) -> Dict[str, Any]:
 
 
 class LogReader:
-    """mood_log Worksheet から読み込み・集計する。"""
+    """注入された Worksheet から読み込み・集計する。"""
 
     def __init__(self, worksheet: Worksheet) -> None:
         self._worksheet = worksheet

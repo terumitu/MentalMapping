@@ -1,20 +1,51 @@
-"""mood_log シートへの書き込みレイヤ (v2 仕様 / 5段階 8項目)。
+"""mood-log シートへの書き込みレイヤ (Google Sheets 実スキーマ A〜K 準拠)。
 
-カラム順:
-    date / mood / energy / thinking / focus /
-    sleep_hours / weather / medication / period / recorded_at
+カラム順 (A〜K):
+    A:date B:mood C:energy D:thinking E:focus F:sleep_hours
+    G:weather H:medication I:period J:recorded_at K:time_of_day
 
-Google Sheets への I/O は Worksheet Protocol 経由で受け取るため、
+本モジュールはシート名を保持せず、呼び出し側が解決した Worksheet を
+Worksheet Protocol 経由で注入する。マルチユーザー運用では
+ユーザーごとに別シートの Worksheet を差し替えて使う。
 単体テストでは FakeWorksheet を差し込める。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, List, Optional, Protocol
+from datetime import datetime, time
+from typing import Any, Dict, List, Optional, Protocol
+from zoneinfo import ZoneInfo
 
 SCORE_FIELDS = ("mood", "energy", "thinking", "focus")
 WEATHER_VALUES = ("晴", "曇", "雨")
+TIME_OF_DAY_VALUES = ("morning", "evening")
+
+
+def _parse_hhmm(value: Any, field: str) -> time:
+    if not isinstance(value, str):
+        raise ValueError(f"time_of_day.{field} must be 'HH:MM' string, got {value!r}")
+    try:
+        hh, mm = value.split(":")
+        return time(hour=int(hh), minute=int(mm))
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(
+            f"time_of_day.{field} must be 'HH:MM' string, got {value!r}"
+        ) from exc
+
+
+def determine_time_of_day(now: datetime, settings: Dict[str, Any]) -> str:
+    """settings['time_of_day'] の境界に従い 'morning' / 'evening' を返す。
+
+    morning_start <= now.time() < evening_start のとき 'morning'、
+    それ以外は 'evening' を返す。境界時刻を跨ぐ設定（深夜境界）には未対応。
+    """
+    cfg = (settings or {}).get("time_of_day") or {}
+    morning_start = _parse_hhmm(cfg.get("morning_start"), "morning_start")
+    evening_start = _parse_hhmm(cfg.get("evening_start"), "evening_start")
+    current = now.time().replace(microsecond=0)
+    if morning_start <= current < evening_start:
+        return "morning"
+    return "evening"
 
 
 class Worksheet(Protocol):
@@ -47,14 +78,18 @@ def _validate_score(name: str, value: Any) -> None:
 
 @dataclass(frozen=True)
 class MoodLogEntry:
-    """mood_log の 1 レコード (v2 仕様)。
+    """mood_log の 1 レコード (Google Sheets 実スキーマ A〜K 準拠)。
 
     必須スコア (1-5): mood / energy / thinking / focus
+    必須分類:        time_of_day ("morning" | "evening")
     任意項目:
         sleep_hours: float | None (0-24)
         weather:     "晴" | "曇" | "雨" | None
         medication:  bool | None
         period:      bool | None
+
+    フィールド宣言順は Sheets の列順 A〜K と一致させている
+    （time_of_day は K 列のため末尾）。
     """
 
     date: str
@@ -67,6 +102,7 @@ class MoodLogEntry:
     medication: Optional[bool]
     period: Optional[bool]
     recorded_at: str
+    time_of_day: str
 
     @classmethod
     def create(
@@ -76,6 +112,7 @@ class MoodLogEntry:
         energy: int,
         thinking: int,
         focus: int,
+        time_of_day: str,
         sleep_hours: Optional[float] = None,
         weather: Optional[str] = None,
         medication: Optional[bool] = None,
@@ -88,6 +125,10 @@ class MoodLogEntry:
         _validate_score("energy", energy)
         _validate_score("thinking", thinking)
         _validate_score("focus", focus)
+        if time_of_day not in TIME_OF_DAY_VALUES:
+            raise ValueError(
+                f"time_of_day must be one of {TIME_OF_DAY_VALUES}, got {time_of_day!r}"
+            )
         if sleep_hours is not None:
             if isinstance(sleep_hours, bool) or not isinstance(sleep_hours, (int, float)):
                 raise ValueError(
@@ -106,7 +147,9 @@ class MoodLogEntry:
         if period is not None and not isinstance(period, bool):
             raise ValueError(f"period must be bool or None, got {period!r}")
         if recorded_at is None:
-            recorded_at = datetime.now().isoformat(timespec="seconds")
+            recorded_at = datetime.now(tz=ZoneInfo("Asia/Tokyo")).strftime(
+                "%Y-%m-%dT%H:%M:%S"
+            )
         return cls(
             date=date,
             mood=mood,
@@ -118,26 +161,28 @@ class MoodLogEntry:
             medication=medication,
             period=period,
             recorded_at=recorded_at,
+            time_of_day=time_of_day,
         )
 
     def to_row(self) -> List[Any]:
-        """Sheets に append する行表現。None/bool は Sheets 互換の文字列化。"""
+        """Sheets に append する行表現。列順 A〜K。None/bool は Sheets 互換の文字列化。"""
         return [
-            self.date,
-            self.mood,
-            self.energy,
-            self.thinking,
-            self.focus,
-            _float_cell(self.sleep_hours),
-            _str_cell(self.weather),
-            _bool_cell(self.medication),
-            _bool_cell(self.period),
-            self.recorded_at,
+            self.date,                      # A
+            self.mood,                      # B
+            self.energy,                    # C
+            self.thinking,                  # D
+            self.focus,                     # E
+            _float_cell(self.sleep_hours),  # F
+            _str_cell(self.weather),        # G
+            _bool_cell(self.medication),    # H
+            _bool_cell(self.period),        # I
+            self.recorded_at,               # J
+            self.time_of_day,               # K
         ]
 
 
 class LogWriter:
-    """mood_log Worksheet に 1 レコードを append する。"""
+    """注入された Worksheet に 1 レコードを append する。"""
 
     def __init__(self, worksheet: Worksheet) -> None:
         self._worksheet = worksheet

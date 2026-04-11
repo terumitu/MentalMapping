@@ -1,11 +1,12 @@
-"""log_writer.py 単体テスト (v2 仕様 / 5段階 8項目)。"""
+"""log_writer.py 単体テスト (v2 仕様 / 5段階 8項目 + time_of_day)。"""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Dict, List
 
 import pytest
 
-from modules.log_writer import LogWriter, MoodLogEntry
+from modules.log_writer import LogWriter, MoodLogEntry, determine_time_of_day
 
 
 class FakeWorksheet:
@@ -23,6 +24,7 @@ def _valid_kwargs(**overrides: Any) -> Dict[str, Any]:
         energy=3,
         thinking=3,
         focus=3,
+        time_of_day="morning",
         sleep_hours=7.0,
         weather="晴",
         medication=False,
@@ -30,6 +32,11 @@ def _valid_kwargs(**overrides: Any) -> Dict[str, Any]:
     )
     base.update(overrides)
     return base
+
+
+_TIME_SETTINGS: Dict[str, Any] = {
+    "time_of_day": {"morning_start": "05:30", "evening_start": "15:31"},
+}
 
 
 # ---- MoodLogEntry.create : happy path --------------------------------------
@@ -63,6 +70,7 @@ def test_create_allows_none_for_optional_fields() -> None:
         energy=2,
         thinking=3,
         focus=4,
+        time_of_day="evening",
         sleep_hours=None,
         weather=None,
         medication=None,
@@ -72,6 +80,7 @@ def test_create_allows_none_for_optional_fields() -> None:
     assert entry.weather is None
     assert entry.medication is None
     assert entry.period is None
+    assert entry.time_of_day == "evening"
 
 
 # ---- MoodLogEntry.create : score validation --------------------------------
@@ -131,23 +140,27 @@ def test_to_row_full_fields() -> None:
         energy=4,
         thinking=4,
         focus=3,
+        time_of_day="morning",
         sleep_hours=7.5,
         weather="晴",
         medication=True,
         period=False,
         recorded_at="2026-04-11T10:00:00",
     )
+    # A〜K 順: date mood energy thinking focus sleep_hours
+    #          weather medication period recorded_at time_of_day
     assert entry.to_row() == [
-        "2026-04-11",
-        5,
-        4,
-        4,
-        3,
-        7.5,
-        "晴",
-        "TRUE",
-        "FALSE",
-        "2026-04-11T10:00:00",
+        "2026-04-11",           # A: date
+        5,                      # B: mood
+        4,                      # C: energy
+        4,                      # D: thinking
+        3,                      # E: focus
+        7.5,                    # F: sleep_hours
+        "晴",                   # G: weather
+        "TRUE",                 # H: medication
+        "FALSE",                # I: period
+        "2026-04-11T10:00:00",  # J: recorded_at
+        "morning",              # K: time_of_day
     ]
 
 
@@ -158,6 +171,7 @@ def test_to_row_none_optionals_become_empty_string() -> None:
         energy=3,
         thinking=3,
         focus=3,
+        time_of_day="evening",
         sleep_hours=None,
         weather=None,
         medication=None,
@@ -165,12 +179,13 @@ def test_to_row_none_optionals_become_empty_string() -> None:
         recorded_at="2026-04-11T10:00:00",
     )
     row = entry.to_row()
-    assert row[0] == "2026-04-11"
-    assert row[5] == ""   # sleep_hours
-    assert row[6] == ""   # weather
-    assert row[7] == ""   # medication
-    assert row[8] == ""   # period
-    assert row[9] == "2026-04-11T10:00:00"
+    assert row[0] == "2026-04-11"            # A: date
+    assert row[5] == ""                      # F: sleep_hours
+    assert row[6] == ""                      # G: weather
+    assert row[7] == ""                      # H: medication
+    assert row[8] == ""                      # I: period
+    assert row[9] == "2026-04-11T10:00:00"   # J: recorded_at
+    assert row[10] == "evening"              # K: time_of_day
 
 
 def test_to_row_medication_period_both_true() -> None:
@@ -180,6 +195,7 @@ def test_to_row_medication_period_both_true() -> None:
         energy=2,
         thinking=3,
         focus=2,
+        time_of_day="evening",
         sleep_hours=5.0,
         weather="雨",
         medication=True,
@@ -187,9 +203,10 @@ def test_to_row_medication_period_both_true() -> None:
         recorded_at="2026-04-11T22:00:00",
     )
     row = entry.to_row()
-    assert row[6] == "雨"
-    assert row[7] == "TRUE"
-    assert row[8] == "TRUE"
+    assert row[6] == "雨"     # G: weather
+    assert row[7] == "TRUE"   # H: medication
+    assert row[8] == "TRUE"   # I: period
+    assert row[10] == "evening"  # K: time_of_day
 
 
 # ---- LogWriter -------------------------------------------------------------
@@ -204,6 +221,7 @@ def test_writer_append_delegates_to_worksheet() -> None:
         energy=4,
         thinking=4,
         focus=3,
+        time_of_day="morning",
         sleep_hours=7.5,
         weather="晴",
         medication=True,
@@ -214,7 +232,7 @@ def test_writer_append_delegates_to_worksheet() -> None:
     assert ws.rows == [
         [
             "2026-04-11", 5, 4, 4, 3, 7.5, "晴", "TRUE", "FALSE",
-            "2026-04-11T10:00:00",
+            "2026-04-11T10:00:00", "morning",
         ],
     ]
 
@@ -230,6 +248,7 @@ def test_writer_append_multiple_rows() -> None:
                 energy=3,
                 thinking=3,
                 focus=3,
+                time_of_day="morning",
                 sleep_hours=7.0,
                 weather="晴",
                 medication=False,
@@ -242,3 +261,44 @@ def test_writer_append_multiple_rows() -> None:
     assert ws.rows[1][0] == "2026-04-11"
     assert ws.rows[0][1] == 3
     assert ws.rows[1][1] == 4
+
+
+# ---- determine_time_of_day : 境界4ケース + 設定可変性 -----------------------
+
+
+def _at(hh: int, mm: int) -> datetime:
+    return datetime(2026, 4, 11, hh, mm, 0)
+
+
+@pytest.mark.parametrize(
+    "now, expected",
+    [
+        (_at(5, 29), "evening"),   # 境界直前
+        (_at(5, 30), "morning"),   # morning_start 丁度
+        (_at(15, 30), "morning"),  # evening_start 直前
+        (_at(15, 31), "evening"),  # evening_start 丁度
+    ],
+)
+def test_determine_time_of_day_boundaries(now: datetime, expected: str) -> None:
+    assert determine_time_of_day(now, _TIME_SETTINGS) == expected
+
+
+def test_determine_time_of_day_respects_settings_override() -> None:
+    custom = {"time_of_day": {"morning_start": "08:00", "evening_start": "20:00"}}
+    assert determine_time_of_day(_at(7, 59), custom) == "evening"
+    assert determine_time_of_day(_at(8, 0), custom) == "morning"
+    assert determine_time_of_day(_at(19, 59), custom) == "morning"
+    assert determine_time_of_day(_at(20, 0), custom) == "evening"
+
+
+def test_determine_time_of_day_rejects_missing_config() -> None:
+    with pytest.raises(ValueError, match="morning_start"):
+        determine_time_of_day(_at(10, 0), {})
+
+
+# ---- time_of_day validation -------------------------------------------------
+
+
+def test_create_rejects_invalid_time_of_day() -> None:
+    with pytest.raises(ValueError, match="time_of_day"):
+        MoodLogEntry.create(**_valid_kwargs(time_of_day="night"))
