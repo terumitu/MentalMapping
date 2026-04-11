@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -190,7 +191,7 @@ def _build_mood_map(df: pd.DataFrame, year: int, month: int) -> dict[str, int]:
 def build_calendar_chart(reader: LogReader) -> go.Figure:
     """当月カレンダービュー (mood 1-5 で 5 段階色分け)。"""
     df = load_logs(reader)
-    now = datetime.now()
+    now = datetime.now(tz=ZoneInfo("Asia/Tokyo"))
     weeks = _month_grid(now.year, now.month)
     mood_map = _build_mood_map(df, now.year, now.month)
     day_labels = ["日", "月", "火", "水", "木", "金", "土"]
