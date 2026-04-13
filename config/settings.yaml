@@ -15,10 +15,13 @@ google_sheets:
 users:
   masuda:
     display_name: "増田舞"
-    sheet_name: "mood_log_masuda"
+    sheet_name: "mood_log"
   nishide:
     display_name: "西出朋起"
     sheet_name: "mood_log_nishide"
+  suyasu:
+    display_name: "須安麗子"
+    sheet_name: "mood_log_suyasu"
 default_user: "masuda"
 
 # 記録時刻から morning / evening を判定する境界（JST）
