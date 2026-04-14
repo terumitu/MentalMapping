@@ -15,7 +15,7 @@ google_sheets:
 users:
   masuda:
     display_name: "増田舞"
-    sheet_name: "mood_log"
+    sheet_name: "mood_log_masuda"
   nishide:
     display_name: "西出朋起"
     sheet_name: "mood_log_nishide"
