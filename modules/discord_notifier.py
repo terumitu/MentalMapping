@@ -97,19 +97,14 @@ def send(sheet_name: str) -> None:
     sheet_name に対応する transit_grid シートから当日アスペクトを取得し
     Discord に投稿する。未設定・データなし・通信エラーはログのみ。
     """
-    # --- DEBUG: Cloud 疎通確認用 (確認後に削除) ---
-    import streamlit as st
-
-    st.warning(f"STEP1: send() called, sheet={sheet_name}")
     transit_sheet = _resolve_transit_sheet(sheet_name)
     if transit_sheet is None:
-        st.warning(f"STEP1b: No transit_grid mapping for sheet={sheet_name}")
+        logger.info("No transit_grid mapping for sheet: %s", sheet_name)
         return
 
-    st.warning(f"STEP2: transit_sheet={transit_sheet}")
     webhook_url = _get_webhook_url()
-    st.warning(f"STEP3: webhook_url={'SET' if webhook_url else 'NONE'}")
     if not webhook_url:
+        logger.warning("DISCORD_WEBHOOK_URL is not configured in secrets")
         return
 
     try:
@@ -117,16 +112,12 @@ def send(sheet_name: str) -> None:
 
         now = datetime.now(tz=JST)
         today = now.strftime("%Y-%m-%d")
-        st.warning(f"STEP4: connecting to {transit_sheet}, today={today}")
         ws = connect_worksheet(sheet_name=transit_sheet)
         aspects = _fetch_today_aspects(ws, today)
-        st.warning(f"STEP5: found {len(aspects)} aspects")
         if not aspects:
+            logger.info("No transit aspects for %s in %s", today, transit_sheet)
             return
         message = _format_message(aspects, now)
-        st.warning(f"STEP6: posting {len(message)} chars to Discord...")
         _post_discord(webhook_url, message)
-        st.warning("STEP7: posted successfully")
-    except Exception as e:
-        st.error(f"DISCORD ERROR: {type(e).__name__}: {e}")
+    except Exception:
         logger.exception("Discord notification failed (sheet: %s)", sheet_name)
