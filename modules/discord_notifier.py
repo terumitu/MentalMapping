@@ -36,10 +36,11 @@ def _get_webhook_url() -> Optional[str]:
     try:
         import streamlit as st
 
-        if hasattr(st, "secrets") and "DISCORD_WEBHOOK_URL" in st.secrets:
-            return str(st.secrets["DISCORD_WEBHOOK_URL"])
-    except Exception:
-        pass
+        return str(st.secrets["DISCORD_WEBHOOK_URL"])
+    except KeyError:
+        logger.warning("DISCORD_WEBHOOK_URL is not set in Streamlit secrets")
+    except Exception as e:
+        logger.warning("Failed to read DISCORD_WEBHOOK_URL: %s: %s", type(e).__name__, e)
     return None
 
 
