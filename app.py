@@ -23,7 +23,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from modules import chart_builder
+from modules import chart_builder, discord_notifier
 from modules.log_reader import LogReader
 from modules.log_writer import LogWriter, MoodLogEntry, determine_time_of_day
 from modules.sheet_client import connect_worksheet, load_settings, resolve_sheet_name
@@ -168,6 +168,7 @@ def render_record_tab(sheet_name: str) -> None:
         st.error(f"Google Sheets への書き込みに失敗しました: {e}")
         return
     st.success("記録しました")
+    discord_notifier.send(sheet_name)
 
 
 def render_view_tab(sheet_name: str) -> None:
@@ -218,6 +219,7 @@ def main() -> None:
     except ValueError as e:
         st.error(f"シート名の解決に失敗しました: {e}")
         return
+    st.session_state["sheet_name"] = sheet_name
     st.sidebar.caption(f"書き込み先シート: `{sheet_name}`")
     tab_record, tab_view = st.tabs(["記録する", "見る"])
     with tab_record:
