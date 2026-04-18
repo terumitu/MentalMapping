@@ -18,7 +18,12 @@
 
 const BATCH_LOG_SHEET = 'gas_batch_log';
 
-/** Discord Webhook に content を 1 件 POST。失敗は catch のみ。 */
+/**
+ * Discord Webhook に content を 1 件 POST。
+ * muteHttpExceptions: true で 4xx/5xx は例外化しないため、明示的に
+ * getResponseCode() をログ出力する。2xx 以外の場合は body も出力して原因特定可能に。
+ * 例外 (DNS 解決失敗・timeout 等) は catch して Logger.log のみ。
+ */
 function notifyDiscord(content) {
   const url = PropertiesService.getScriptProperties()
     .getProperty('DISCORD_WEBHOOK_URL');
@@ -26,16 +31,26 @@ function notifyDiscord(content) {
     Logger.log('DISCORD_WEBHOOK_URL is not configured, skip notification');
     return;
   }
+  Logger.log('Discord webhook URL length: ' + url.length +
+    ' startsWith https://discord.com: ' +
+    (url.indexOf('https://discord.com/') === 0 ||
+     url.indexOf('https://discordapp.com/') === 0));
   try {
     const payload = JSON.stringify({ content: content });
-    UrlFetchApp.fetch(url, {
+    const response = UrlFetchApp.fetch(url, {
       method: 'post',
       contentType: 'application/json',
       payload: payload,
       muteHttpExceptions: true,
     });
+    const code = response.getResponseCode();
+    Logger.log('Discord HTTP status: ' + code);
+    if (code < 200 || code >= 300) {
+      Logger.log('Discord response body: ' + response.getContentText());
+    }
   } catch (err) {
-    Logger.log('Discord notify failed: ' + err.message);
+    Logger.log('Discord notify exception: ' + err.message);
+    console.error('Discord notify: ' + (err.stack || err.message));
   }
 }
 
