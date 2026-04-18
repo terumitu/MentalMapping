@@ -1,4 +1,4 @@
-# MentalMapping Phase 1 v1.2 — Google Sheets 接続設定
+# MentalMapping Phase 1 v1.2.2 — Google Sheets 接続設定
 #
 # credentials_path は Google Cloud Console で発行した
 # サービスアカウント JSON のパス。
@@ -9,7 +9,9 @@
 #   - time_of_day.morning_start / evening_start を廃止
 #   - users.{user}.{morning,evening}_realtime_window を追加（§4.7）
 #   - mood_log_columns は 17 列固定化により削除
-#   - suyasu は休眠ユーザー。入力再開時にコメント解除
+# v1.2.2 差分:
+#   - suyasu セクション復活（休眠ユーザーだが users キーには登録）
+#   - realtime_window は未定義のまま → entry_mode=pending 付与対象（§4.3.4）
 
 google_sheets:
   spreadsheet_id: "1S0cWK_0WIrxit8Yi0eK7Ocb-JHF99AsfxDCGPd0Hqao"
@@ -18,6 +20,7 @@ google_sheets:
 # マルチユーザー対応: ユーザーごとに別 worksheet（同一 spreadsheet 内）。
 # default_user は起動時の初期選択。毎回の記録では UI で明示選択必須。
 # realtime_window は [start, end) 半開区間。evening の "26:00" は翌日 02:00 JST を意味する。
+# realtime_window 未定義のユーザーは entry_mode=pending が付与される（§4.3.4 / mm_notes #7）。
 users:
   masuda:
     display_name: "増田舞"
@@ -29,10 +32,12 @@ users:
     sheet_name: "mood_log_nishide"
     morning_realtime_window: ["10:00", "14:00"]
     evening_realtime_window: ["17:00", "26:00"]
-  # suyasu は休眠ユーザー。入力再開時に窓設定を決定する。
-  # suyasu:
-  #   display_name: "須安麗子"
-  #   sheet_name: "mood_log_suyasu"
-  #   morning_realtime_window: [TBD]
-  #   evening_realtime_window: [TBD]
+  suyasu:
+    display_name: "須安麗子"
+    sheet_name: "mood_log_suyasu"
+    # realtime_window は意図的に未定義（休眠ユーザー）。
+    # 記録された場合は entry_mode=pending（§4.3.4）。
+    # 入力再開時に下記コメントを解除して値を設定する:
+    # morning_realtime_window: [TBD]
+    # evening_realtime_window: [TBD]
 default_user: "masuda"

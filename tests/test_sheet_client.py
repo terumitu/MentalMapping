@@ -118,3 +118,30 @@ def test_resolve_sheet_name_enables_input_user_integrity_check() -> None:
     # 不一致ケース: masuda 選択 → mood_log_nishide に書こうとしている
     # (app.py はこの差分を st.session_state.needs_integrity_ack トリガーに利用)
     assert expected != "mood_log_nishide"
+
+
+# ---- v1.2.2 suyasu 復活確認 (実 settings.yaml 統合テスト) ------------------
+
+
+def test_real_settings_yaml_includes_suyasu_for_pending_revival() -> None:
+    """v1.2.2 で suyasu セクション復活。realtime_window 未定義 → pending 付与対象。
+
+    本テストは実 settings.yaml を読み込み、以下を検証:
+    - suyasu が users に存在し、sheet_name が定義済み
+    - morning/evening_realtime_window は意図的に未定義 (pending トリガー)
+    """
+    from modules.sheet_client import load_settings
+    settings = load_settings()
+    users = settings.get("users") or {}
+    assert "suyasu" in users, "suyasu missing from real settings.yaml"
+    assert users["suyasu"].get("sheet_name") == "mood_log_suyasu"
+    # 意図的に未定義 (pending 付与のため)
+    assert "morning_realtime_window" not in users["suyasu"]
+    assert "evening_realtime_window" not in users["suyasu"]
+
+
+def test_real_settings_yaml_resolves_suyasu_to_correct_sheet() -> None:
+    """resolve_sheet_name が suyasu → mood_log_suyasu を正しく解決する。"""
+    from modules.sheet_client import load_settings
+    settings = load_settings()
+    assert resolve_sheet_name(settings, "suyasu") == "mood_log_suyasu"
