@@ -61,8 +61,10 @@ MentalMapping/
 |----|------|------|------|
 | エントリー | app.py | Streamlit UI・画面遷移 | ビジネスロジック直書き |
 | チャート | modules/chart_builder.py | 可視化データ構築 | Sheets 操作・UI |
-| 読取 | modules/log_reader.py | Sheets からのログ取得 | 書き込み・UI |
-| 書込 | modules/log_writer.py | Sheets へのログ保存 | 読取・UI |
+| 読取 | modules/log_reader.py | Sheets からのログ取得 (active フィルタ / revision chain) | 書き込み・UI |
+| 書込 | modules/log_writer.py | MoodLogEntry バリデーション + Sheets への append | 読取・UI・鎖更新・窓判定 |
+| entry_mode | modules/entry_mode.py | realtime_window 窓判定 (§4.3) | Sheets I/O・UI・鎖更新 |
+| 鎖構造 | modules/record_chain.py | record_id 生成 / find_active / supersede_active / get_revision_chain (§4.4 / §A.3 / §A.4) | MoodLogEntry 生成・窓判定・UI |
 | 接続 | modules/sheet_client.py | Google Sheets API 接続管理 | ビジネスロジック |
 
 ---

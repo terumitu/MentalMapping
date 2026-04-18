@@ -1,14 +1,17 @@
-"""mood-log シートからの読み込み・集計レイヤ (Google Sheets 実スキーマ A〜K 準拠)。
+"""mood-log シートからの読み込み・集計レイヤ (A〜Q 17 列準拠)。
 
-カラム順 (A〜K):
-    A:date B:mood C:energy D:thinking E:focus F:sleep_hours
-    G:weather H:medication I:period J:recorded_at K:time_of_day
+v1.2 仕様:
+    - fetch_active_records(): record_status=active のみ抽出 (§4.4)
+    - get_revision_chain():   スコープ内 全レコードを時系列で返す (§A.5)
+    - aggregate_*:            active かつ entry_mode != not_recorded のみ集計
+
+カラム順 (v1.2 / 17 列): A:date B:mood C:energy D:thinking E:focus
+    F:sleep_hours G:weather H:medication I:period J:recorded_at
+    K:time_of_day L:daily_aspects M:record_id N:record_status
+    O:superseded_by P:entry_mode Q:input_user
 
 本モジュールはシート名を保持せず、呼び出し側が解決した Worksheet を
-Worksheet Protocol 経由で注入する。マルチユーザー運用では
-ユーザーごとに別シートの Worksheet を差し替えて使う。get_all_records
-はヘッダ行キーで dict を返すので、列位置の変更には影響されない。
-同日複数レコードは recorded_at が最も新しい 1 件のみを採用する。
+Worksheet Protocol 経由で注入する。
 """
 from __future__ import annotations
 
@@ -19,7 +22,7 @@ SCORE_FIELDS = ("mood", "energy", "thinking", "focus")
 
 
 class Worksheet(Protocol):
-    """gspread.Worksheet が満たすべき最小インタフェース。"""
+    """gspread.Worksheet が満たすべき最小インタフェース (読み取り用)。"""
 
     def get_all_records(self) -> List[Dict[str, Any]]: ...
 
@@ -74,27 +77,49 @@ class LogReader:
         """全行を辞書リストで返す (加工なし・順序保持)。"""
         return list(self._worksheet.get_all_records())
 
-    def fetch_latest_per_day(self) -> List[Dict[str, Any]]:
-        """同日複数記録時は recorded_at が最新の 1 件を採用。date 昇順で返す。"""
-        latest: Dict[str, Dict[str, Any]] = {}
-        for rec in self.fetch_all():
-            date = rec.get("date")
-            if not date:
-                continue
-            prev = latest.get(date)
-            if prev is None:
-                latest[date] = rec
-                continue
-            if str(rec.get("recorded_at", "")) >= str(prev.get("recorded_at", "")):
-                latest[date] = rec
-        return [latest[d] for d in sorted(latest.keys())]
+    def fetch_active_records(self) -> List[Dict[str, Any]]:
+        """record_status=active のレコードを (date, time_of_day) 昇順で返す。
 
-    # ---- aggregates (numeric) ------------------------------------------
+        not_recorded も active の一形態として含まれる (§4.3.2)。
+        数値集計側で entry_mode を見て除外する責務を持つ。
+        """
+        active = [
+            rec
+            for rec in self.fetch_all()
+            if str(rec.get("record_status", "")) == "active"
+        ]
+        active.sort(
+            key=lambda r: (str(r.get("date", "")), str(r.get("time_of_day", "")))
+        )
+        return active
+
+    def get_revision_chain(
+        self, input_user: str, date: str, time_of_day: str
+    ) -> List[Dict[str, Any]]:
+        """スコープ内全レコード (active + superseded) を recorded_at 昇順で返す。"""
+        records = [
+            r
+            for r in self.fetch_all()
+            if str(r.get("input_user", "")) == input_user
+            and str(r.get("date", "")) == date
+            and str(r.get("time_of_day", "")) == time_of_day
+        ]
+        records.sort(key=lambda r: str(r.get("recorded_at", "")))
+        return records
+
+    # ---- aggregates (numeric, not_recorded を除外) ---------------------
+
+    def _numeric_target_records(self) -> List[Dict[str, Any]]:
+        """active かつ entry_mode != not_recorded のレコード (集計対象)。"""
+        return [
+            r
+            for r in self.fetch_active_records()
+            if str(r.get("entry_mode", "")) != "not_recorded"
+        ]
 
     def _collect_numeric(self, field: str) -> List[float]:
-        records = self.fetch_latest_per_day()
         out: List[float] = []
-        for rec in records:
+        for rec in self._numeric_target_records():
             v = _to_float(rec.get(field))
             if v is not None:
                 out.append(v)
@@ -118,8 +143,7 @@ class LogReader:
     # ---- ratios / distribution (optional fields) -----------------------
 
     def _bool_ratio(self, field: str) -> Optional[float]:
-        records = self.fetch_latest_per_day()
-        bools = [_to_bool(r.get(field)) for r in records]
+        bools = [_to_bool(r.get(field)) for r in self._numeric_target_records()]
         bools = [b for b in bools if b is not None]
         if not bools:
             return None
@@ -134,10 +158,9 @@ class LogReader:
         return self._bool_ratio("period")
 
     def weather_distribution(self) -> Dict[str, int]:
-        """weather 値の出現回数 (空セルは除外)。"""
-        records = self.fetch_latest_per_day()
+        """weather 値の出現回数 (空セルと not_recorded は除外)。"""
         dist: Dict[str, int] = {}
-        for r in records:
+        for r in self._numeric_target_records():
             w = r.get("weather")
             if w is None or w == "":
                 continue

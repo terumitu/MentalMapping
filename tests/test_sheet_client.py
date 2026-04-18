@@ -103,3 +103,18 @@ def test_default_paths_are_absolute() -> None:
     assert DEFAULT_CREDENTIALS_PATH.is_absolute()
     assert DEFAULT_SETTINGS_PATH.name == "settings.yaml"
     assert DEFAULT_CREDENTIALS_PATH.name == "credentials.json"
+
+
+# ---- input_user 整合性検出 (§4.6.2 A 実装基盤) -----------------------------
+
+
+def test_resolve_sheet_name_enables_input_user_integrity_check() -> None:
+    """resolve_sheet_name の結果と実際の sheet_name を比較すれば
+    input_user 不一致を検出できる (§4.6.2 A の UI 警告実装基盤)。"""
+    settings = _settings()
+    # 正常ケース: masuda 選択 → mood_log_masuda に書こうとしている
+    expected = resolve_sheet_name(settings, "masuda")
+    assert expected == "mood_log_masuda"
+    # 不一致ケース: masuda 選択 → mood_log_nishide に書こうとしている
+    # (app.py はこの差分を st.session_state.needs_integrity_ack トリガーに利用)
+    assert expected != "mood_log_nishide"

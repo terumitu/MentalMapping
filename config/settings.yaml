@@ -1,48 +1,38 @@
-# MentalMapping Phase 1 — Google Sheets 接続設定
+# MentalMapping Phase 1 v1.2 — Google Sheets 接続設定
 #
 # credentials_path は Google Cloud Console で発行した
-# サービスアカウント JSON のパスを指定する。
+# サービスアカウント JSON のパス。
 # spreadsheet_id はスプレッドシート URL の /d/<id>/ 部分。
-# サービスアカウントのメールアドレスをスプレッドシートに「編集者」で共有しておくこと。
+# サービスアカウントのメールを spreadsheet に「編集者」で共有しておくこと。
+#
+# v1.2 差分:
+#   - time_of_day.morning_start / evening_start を廃止
+#   - users.{user}.{morning,evening}_realtime_window を追加（§4.7）
+#   - mood_log_columns は 17 列固定化により削除
+#   - suyasu は休眠ユーザー。入力再開時にコメント解除
 
 google_sheets:
   spreadsheet_id: "1S0cWK_0WIrxit8Yi0eK7Ocb-JHF99AsfxDCGPd0Hqao"
-  sheet_name: "mood_log"  # users 未指定時のフォールバック
   credentials_path: "config/credentials.json"
 
-# マルチユーザー対応: ユーザーごとに別シートへ記録する
-# default_user は起動時の初期選択。users に存在しないキーは google_sheets.sheet_name にフォールバック。
+# マルチユーザー対応: ユーザーごとに別 worksheet（同一 spreadsheet 内）。
+# default_user は起動時の初期選択。毎回の記録では UI で明示選択必須。
+# realtime_window は [start, end) 半開区間。evening の "26:00" は翌日 02:00 JST を意味する。
 users:
   masuda:
     display_name: "増田舞"
     sheet_name: "mood_log_masuda"
+    morning_realtime_window: ["06:00", "16:00"]
+    evening_realtime_window: ["17:00", "26:00"]
   nishide:
     display_name: "西出朋起"
     sheet_name: "mood_log_nishide"
-  suyasu:
-    display_name: "須安麗子"
-    sheet_name: "mood_log_suyasu"
+    morning_realtime_window: ["10:00", "14:00"]
+    evening_realtime_window: ["17:00", "26:00"]
+  # suyasu は休眠ユーザー。入力再開時に窓設定を決定する。
+  # suyasu:
+  #   display_name: "須安麗子"
+  #   sheet_name: "mood_log_suyasu"
+  #   morning_realtime_window: [TBD]
+  #   evening_realtime_window: [TBD]
 default_user: "masuda"
-
-# 記録時刻から morning / evening を判定する境界（JST）
-# morning_start <= now < evening_start → "morning"、それ以外 → "evening"
-time_of_day:
-  morning_start: "05:30"
-  evening_start: "15:31"
-
-# mood_log のカラム順（Google Sheets 実シート準拠・A〜K）
-# v2 仕様 (5段階 4項目 必須 + 任意4項目 + 自動2項目)
-#   A:date B:mood C:energy D:thinking E:focus F:sleep_hours
-#   G:weather H:medication I:period J:recorded_at K:time_of_day
-mood_log_columns:
-  - date          # A
-  - mood          # B (int 1-5)
-  - energy        # C (int 1-5)
-  - thinking      # D (int 1-5)
-  - focus         # E (int 1-5)
-  - sleep_hours   # F (float)
-  - weather       # G (晴/曇/雨)
-  - medication    # H (bool)
-  - period        # I (bool)
-  - recorded_at   # J (JST 自動)
-  - time_of_day   # K (morning/evening 自動)
