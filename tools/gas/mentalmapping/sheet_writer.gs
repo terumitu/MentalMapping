@@ -76,7 +76,7 @@ function loadExistingSlots(sheetName) {
   }
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
-    const d = _cellDateStr(row[idxDate]);
+    const d = toDateString(row[idxDate]);
     const t = _cellStr(row[idxTod]);
     if (!d || !t) continue;
     slots.add(_slotKey(d, t));

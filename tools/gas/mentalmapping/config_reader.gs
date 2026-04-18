@@ -48,14 +48,10 @@ function _buildUser(row) {
   const inputUser = _cellStr(row[0]);
   const displayName = _cellStr(row[1]);
   const sheetName = _cellStr(row[2]);
-  const morningStart = _cellStr(row[3]);
-  const morningEnd = _cellStr(row[4]);
-  const eveningStart = _cellStr(row[5]);
-  const eveningEnd = _cellStr(row[6]);
-  const startDateStr = _cellStr(row[7]);
-
-  const morningWindow = parseWindow(morningStart, morningEnd);
-  const eveningWindow = parseWindow(eveningStart, eveningEnd);
+  // 時刻セルは Sheets が Date に変換しうるため parseWindow 内で toHhmmString 経由に委譲
+  const morningWindow = parseWindow(row[3], row[4]);
+  const eveningWindow = parseWindow(row[5], row[6]);
+  const startDateStr = toDateString(row[7]);
   const isPending = (morningWindow === null || eveningWindow === null);
 
   return {
@@ -86,7 +82,7 @@ function readConfigExclude() {
   for (let i = 1; i < values.length; i++) {
     const row = values[i];
     const inputUser = _cellStr(row[0]);
-    const dateStr = _cellDateStr(row[1]);
+    const dateStr = toDateString(row[1]);
     const tod = _cellStr(row[2]);
     if (!inputUser || !dateStr || !tod) continue;
     excludeSet.add(_excludeKey(inputUser, dateStr, tod));
@@ -99,18 +95,8 @@ function _excludeKey(inputUser, dateStr, tod) {
   return inputUser + '|' + dateStr + '|' + tod;
 }
 
-/** セル値を trim 済み文字列化。Date インスタンスはそのまま toString (日付は _cellDateStr を使うこと)。 */
+/** セル値を trim 済み文字列化 (日付/時刻は util.toDateString / toHhmmString を使うこと)。 */
 function _cellStr(v) {
   if (v === null || v === undefined) return '';
-  return String(v).trim();
-}
-
-/**
- * date セルを 'YYYY-MM-DD' 文字列化。Sheets が Date として解釈した場合は
- * jstDateString で整形、文字列のままなら trim のみ。
- */
-function _cellDateStr(v) {
-  if (v === null || v === undefined) return '';
-  if (v instanceof Date) return jstDateString(v);
   return String(v).trim();
 }

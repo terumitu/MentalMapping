@@ -104,11 +104,40 @@ function addDays(d, days) {
 }
 
 /**
- * 'HH:MM' 文字列 2 つを window 構造体に変換。
- * 空文字は null を返す (pending ユーザー判定用)。
- * 'HH:MM' -> { h: Number, m: Number }
+ * セル値を 'HH:MM' 文字列に正規化する。
+ * Sheets が時刻セルを自動的に Date オブジェクトへ変換するため、Date 受領時は
+ * 1899-12-30 基準の時刻部分を JST で取り出す。文字列の場合は trim のみ。
+ * 空 / null は '' を返す (呼び出し側の空チェック用)。
  */
-function parseWindow(startStr, endStr) {
+function toHhmmString(value) {
+  if (value === null || value === undefined || value === '') return '';
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, TZ_JST, 'HH:mm');
+  }
+  return String(value).trim();
+}
+
+/**
+ * セル値を 'YYYY-MM-DD' 文字列に正規化する。
+ * Sheets が日付セルを Date に変換したケースに対応。文字列の場合は trim のみ。
+ */
+function toDateString(value) {
+  if (value === null || value === undefined || value === '') return '';
+  if (value instanceof Date) {
+    return jstDateString(value);
+  }
+  return String(value).trim();
+}
+
+/**
+ * 'HH:MM' 文字列 2 つを window 構造体に変換。
+ * 空 (null / '') は null を返す (pending ユーザー判定用)。
+ * 'HH:MM' -> { h: Number, m: Number }
+ * 26:00 等の 24 時超過値はそのまま数値化される (evening_realtime_window 深夜扱い)。
+ */
+function parseWindow(startValue, endValue) {
+  const startStr = toHhmmString(startValue);
+  const endStr = toHhmmString(endValue);
   if (!startStr || !endStr) return null;
   return {
     start: _parseHhmm(startStr),
