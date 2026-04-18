@@ -163,20 +163,41 @@ function _listUserIds(users) {
 // テスト用手動トリガー
 // ==========================================================================
 
+/**
+ * 最小ログ疎通確認。Logger.log / console.log の両方を出力。
+ * GAS 実行ログと Cloud Logging の両方に出ることを確認する切り分け用。
+ */
+function testSimpleLog() {
+  Logger.log('Logger.log from α-D testSimpleLog');
+  console.log('console.log from α-D testSimpleLog');
+  const now = new Date();
+  Logger.log('now (Logger) = ' + now.toString());
+  console.log('now (console) = ' + now.toString());
+  return 'testSimpleLog completed at ' + now.toString();
+}
+
 /** config_users / config_exclude を Logger.log に整形出力。 */
 function testConfigRead() {
-  const users = readConfigUsers();
-  Logger.log('--- config_users (' + users.length + ' rows) ---');
-  users.forEach(function(u) {
-    Logger.log(
-      u.inputUser + ' sheet=' + u.sheetName +
-      ' pending=' + u.isPending +
-      ' start=' + u.startDateStr
-    );
-  });
-  const ex = readConfigExclude();
-  Logger.log('--- config_exclude (' + ex.size + ' entries) ---');
-  ex.forEach(function(k) { Logger.log(k); });
+  try {
+    Logger.log('[testConfigRead] enter');
+    const users = readConfigUsers();
+    Logger.log('--- config_users (' + users.length + ' rows) ---');
+    users.forEach(function(u) {
+      Logger.log(
+        u.inputUser + ' sheet=' + u.sheetName +
+        ' pending=' + u.isPending +
+        ' start=' + u.startDateStr
+      );
+    });
+    const ex = readConfigExclude();
+    Logger.log('--- config_exclude (' + ex.size + ' entries) ---');
+    ex.forEach(function(k) { Logger.log(k); });
+    Logger.log('[testConfigRead] done');
+  } catch (err) {
+    Logger.log('[testConfigRead] ERROR: ' + err.message);
+    console.error('[testConfigRead] ' + err.stack);
+    throw err;
+  }
 }
 
 function testScanGapsMasuda() { _testScanGaps('masuda'); }
@@ -184,36 +205,61 @@ function testScanGapsNishide() { _testScanGaps('nishide'); }
 function testScanGapsSuyasu() { _testScanGaps('suyasu'); }
 
 function _testScanGaps(inputUser) {
-  const users = readConfigUsers();
-  const user = users.filter(function(u) { return u.inputUser === inputUser; })[0];
-  if (!user) { Logger.log('user not found: ' + inputUser); return; }
-  if (user.isPending) {
-    Logger.log(inputUser + ': pending (skipped)');
-    return;
+  try {
+    Logger.log('[testScanGaps] enter user=' + inputUser);
+    const users = readConfigUsers();
+    const user = users.filter(function(u) { return u.inputUser === inputUser; })[0];
+    if (!user) { Logger.log('user not found: ' + inputUser); return; }
+    if (user.isPending) {
+      Logger.log(inputUser + ': pending (skipped)');
+      return;
+    }
+    const endDate = addDays(jstNow(), -1);
+    const excludeSet = readConfigExclude();
+    const gaps = scanGaps(user, user.startDate, endDate, excludeSet);
+    Logger.log(inputUser + ' gaps=' + gaps.length +
+      ' range=' + user.startDateStr + '..' + jstDateString(endDate));
+    gaps.forEach(function(g) { Logger.log('  ' + g.dateStr + ' ' + g.tod); });
+    Logger.log('[testScanGaps] done');
+  } catch (err) {
+    Logger.log('[testScanGaps] ERROR: ' + err.message);
+    console.error('[testScanGaps] ' + err.stack);
+    throw err;
   }
-  const endDate = addDays(jstNow(), -1);
-  const excludeSet = readConfigExclude();
-  const gaps = scanGaps(user, user.startDate, endDate, excludeSet);
-  Logger.log(inputUser + ' gaps=' + gaps.length +
-    ' range=' + user.startDateStr + '..' + jstDateString(endDate));
-  gaps.forEach(function(g) { Logger.log('  ' + g.dateStr + ' ' + g.tod); });
 }
 
 /** Discord Webhook 疎通確認。 */
 function testNotifyDiscord() {
-  notifyDiscord('[test] α-D notifier疎通確認 ' + jstIsoString(jstNow()));
-  Logger.log('Discord test notification sent');
+  try {
+    Logger.log('[testNotifyDiscord] enter');
+    const url = PropertiesService.getScriptProperties()
+      .getProperty('DISCORD_WEBHOOK_URL');
+    Logger.log('DISCORD_WEBHOOK_URL present: ' + (url ? 'yes' : 'no'));
+    notifyDiscord('[test] α-D notifier疎通確認 ' + jstIsoString(jstNow()));
+    Logger.log('[testNotifyDiscord] done');
+  } catch (err) {
+    Logger.log('[testNotifyDiscord] ERROR: ' + err.message);
+    console.error('[testNotifyDiscord] ' + err.stack);
+    throw err;
+  }
 }
 
 /** gas_batch_log 書き込み疎通確認。 */
 function testAppendBatchLog() {
-  appendBatchLog({
-    mode: 'test',
-    targetDateRange: jstDateString(jstNow()),
-    usersScanned: 'test',
-    gapsGenerated: 0,
-    errors: '',
-    elapsedMs: 0,
-  });
-  Logger.log('gas_batch_log test row appended');
+  try {
+    Logger.log('[testAppendBatchLog] enter');
+    appendBatchLog({
+      mode: 'test',
+      targetDateRange: jstDateString(jstNow()),
+      usersScanned: 'test',
+      gapsGenerated: 0,
+      errors: '',
+      elapsedMs: 0,
+    });
+    Logger.log('[testAppendBatchLog] done');
+  } catch (err) {
+    Logger.log('[testAppendBatchLog] ERROR: ' + err.message);
+    console.error('[testAppendBatchLog] ' + err.stack);
+    throw err;
+  }
 }
