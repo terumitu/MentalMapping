@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 .pytest_cache/
 output/
+tools/gas/mentalmapping/.clasp.json
