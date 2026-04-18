@@ -26,6 +26,7 @@ from modules.log_writer import LogWriter, MoodLogEntry
 from modules.record_chain import (
     find_active_record,
     generate_record_id,
+    is_not_recorded_overwrite,
     supersede_active,
 )
 from modules.sheet_client import connect_worksheet, load_settings, resolve_sheet_name
@@ -193,31 +194,60 @@ def _append_as_rejected(ctx: Dict[str, Any]) -> None:
     _get_writer(ctx["sheet_name"]).append(entry)
 
 
-@st.dialog("既存記録の訂正")
-def _correction_dialog() -> None:
+def _render_correction_body(*, allow_reject: bool) -> None:
+    """訂正ダイアログ本体描画 (v1.2.3 §A.6.3 分岐対応)。
+
+    allow_reject=True  : 通常訂正 (3 択: 上書き / 試行として残す / キャンセル)
+    allow_reject=False : not_recorded 上書き (2 択: 上書き / キャンセル)
+    """
     pending = st.session_state.get("pending_entry")
     if pending is None:
         st.error("pending_entry が存在しません。")
         return
     tod_ja = "起き抜け" if pending["time_of_day"] == "morning" else "夜落ち着いた時"
-    st.write(f"既に **{pending['date']} {tod_ja}** の記録があります。どうしますか?")
-    st.caption("• 上書き: 既存を superseded にして新しい記録を active にします。")
-    st.caption("• 試行として残す: 既存は維持し、新しい記録を superseded_by=null で保存します。")
-    st.caption("• キャンセル: 何もしません。入力値は次の記録ボタン押下まで保持されます。")
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    if allow_reject:
+        st.write(f"既に **{pending['date']} {tod_ja}** の記録があります。どうしますか?")
+        st.caption("• 上書き: 既存を superseded にして新しい記録を active にします。")
+        st.caption("• 試行として残す: 既存は維持し、新しい記録を superseded_by=null で保存します。")
+        st.caption("• キャンセル: 何もしません。入力値は次の記録ボタン押下まで保持されます。")
+    else:
+        st.write(
+            f"**{pending['date']} {tod_ja}** は未入力レコード "
+            f"(`entry_mode=not_recorded`) として自動生成されています。"
+            f"実際の値で記録しますか?"
+        )
+        st.caption(
+            "• 上書き: 自動生成された未入力レコードを superseded にし、"
+            "入力値を active として記録します (§4.4.1 昇格)。"
+        )
+        st.caption("• キャンセル: 何もしません。入力値は次の記録ボタン押下まで保持されます。")
+    cols = st.columns(3 if allow_reject else 2)
+    with cols[0]:
         if st.button("上書き", use_container_width=True, type="primary",
                      key="dlg_overwrite"):
             st.session_state["correction_action"] = "overwrite"
             st.rerun()
-    with col2:
-        if st.button("試行として残す", use_container_width=True, key="dlg_reject"):
-            st.session_state["correction_action"] = "reject"
-            st.rerun()
-    with col3:
+    if allow_reject:
+        with cols[1]:
+            if st.button("試行として残す", use_container_width=True, key="dlg_reject"):
+                st.session_state["correction_action"] = "reject"
+                st.rerun()
+    with cols[-1]:
         if st.button("キャンセル", use_container_width=True, key="dlg_cancel"):
             st.session_state["correction_action"] = "cancel"
             st.rerun()
+
+
+@st.dialog("既存記録の訂正")
+def _correction_dialog_normal() -> None:
+    """通常訂正ダイアログ (既存 entry_mode が realtime / retroactive / pending)。"""
+    _render_correction_body(allow_reject=True)
+
+
+@st.dialog("未入力レコードへの実値記録")
+def _correction_dialog_not_recorded() -> None:
+    """not_recorded 上書きダイアログ (2 択。§A.6.3 (B) / §4.4.1 昇格)。"""
+    _render_correction_body(allow_reject=False)
 
 
 def _consume_correction_action(sheet_name: str) -> None:
@@ -284,7 +314,11 @@ def _handle_integrity_ack(sheet_name: str) -> None:
 
 
 def _proceed_after_integrity(sheet_name: str) -> None:
-    """整合性チェック通過後: 既存 active 有無で write or dialog 分岐。"""
+    """整合性チェック通過後: 既存 active 有無で write or dialog 分岐。
+
+    既存 active が not_recorded の場合は 2 択ダイアログ、それ以外は 3 択ダイアログ
+    に分岐する (v1.2.3 §A.6.3)。
+    """
     ctx = st.session_state.get("pending_entry")
     if ctx is None:
         return
@@ -300,9 +334,13 @@ def _proceed_after_integrity(sheet_name: str) -> None:
         except Exception as e:  # noqa: BLE001
             st.error(f"記録に失敗しました: {type(e).__name__}: {e}")
         st.session_state.pop("pending_entry", None)
+        return
+    row_idx, existing_rec = existing
+    st.session_state["pending_existing_row"] = row_idx
+    if is_not_recorded_overwrite(existing_rec):
+        _correction_dialog_not_recorded()
     else:
-        st.session_state["pending_existing_row"] = existing[0]
-        _correction_dialog()
+        _correction_dialog_normal()
 
 
 def render_record_tab(sheet_name: str, input_user: str) -> None:

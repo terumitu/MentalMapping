@@ -128,3 +128,16 @@ def get_revision_chain(
     ]
     records.sort(key=lambda r: str(r.get("recorded_at", "")))
     return records
+
+
+def is_not_recorded_overwrite(existing_record: Dict[str, Any]) -> bool:
+    """既存 active レコードが not_recorded か判定する (v1.2.3 §A.6.3 分岐用)。
+
+    True の場合、訂正ダイアログは「上書き / キャンセル」の 2 択に縮退し、
+    「試行として残す」を非表示にする。理由: not_recorded への「訂正試行」
+    (superseded_by=null 末端) は意味不成立 (自動生成 vs ユーザー入力の関係)。
+
+    上書き時のチェーン操作 (find_active_record + supersede_active) は両
+    ケースで同一実装を使用するため、本関数は UI 分岐判定のみに用いる。
+    """
+    return str(existing_record.get("entry_mode", "")) == "not_recorded"
