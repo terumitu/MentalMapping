@@ -38,7 +38,14 @@ class FakeWorksheet:
         # モック側は値の扱いをせず従来通り全件返却する（テスト挙動を変えない）。
         return [dict(r) for r in self._records]
 
-    def append_row(self, row: List[Any]) -> None:
+    def append_row(
+        self,
+        row: List[Any],
+        table_range: Any = None,
+        value_input_option: Any = None,
+    ) -> None:
+        # Hotfix 2: LogWriter.append が kwargs を渡すためシグネチャ互換のみ担保。
+        # モック側は値の扱いをせず従来通り row のみ記録する（テスト挙動を変えない）。
         self.appends.append(row)
 
     def update_cell(self, row: int, col: int, value: Any) -> None:

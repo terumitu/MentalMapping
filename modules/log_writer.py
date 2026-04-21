@@ -32,9 +32,20 @@ INPUT_USER_VALUES = ("masuda", "nishide", "suyasu")
 
 
 class Worksheet(Protocol):
-    """gspread.Worksheet が満たすべき最小インタフェース (append 用)。"""
+    """gspread.Worksheet が満たすべき最小インタフェース (append 用)。
 
-    def append_row(self, row: List[Any]) -> Any: ...
+    Hotfix 2: gspread 6.x の append_row は無引数時に usedRange を自動検出し、
+    余剰列 (R..AU 等) を持つ worksheet ではデータが右方向にずれて書き込まれる。
+    Protocol 側で table_range / value_input_option を受けられるよう拡張し、
+    呼び出し側で "A:Q" に固定することで A〜Q の 17 列目に確実に append する。
+    """
+
+    def append_row(
+        self,
+        row: List[Any],
+        table_range: Optional[str] = None,
+        value_input_option: Optional[str] = None,
+    ) -> Any: ...
 
 
 def _bool_cell(value: Optional[bool]) -> str:
@@ -229,4 +240,11 @@ class LogWriter:
         self._worksheet = worksheet
 
     def append(self, entry: MoodLogEntry) -> None:
-        self._worksheet.append_row(entry.to_row())
+        # Hotfix 2: table_range="A:Q" で append 先のテーブル範囲を 17 列に固定し、
+        # usedRange 自動検出経由で R..AU にドリフトするのを防ぐ。
+        # value_input_option="USER_ENTERED" で日付/数値を Sheets 側に解釈させる。
+        self._worksheet.append_row(
+            entry.to_row(),
+            table_range="A:Q",
+            value_input_option="USER_ENTERED",
+        )

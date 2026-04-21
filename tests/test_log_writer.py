@@ -11,8 +11,18 @@ from modules.log_writer import LogWriter, MoodLogEntry
 class FakeWorksheet:
     def __init__(self) -> None:
         self.rows: List[List[Any]] = []
+        self.last_table_range: Any = None
+        self.last_value_input_option: Any = None
 
-    def append_row(self, row: List[Any]) -> None:
+    def append_row(
+        self,
+        row: List[Any],
+        table_range: Any = None,
+        value_input_option: Any = None,
+    ) -> None:
+        # Hotfix 2: append_row の kwargs を保持して assert 可能にする。
+        self.last_table_range = table_range
+        self.last_value_input_option = value_input_option
         self.rows.append(row)
 
 
@@ -280,6 +290,35 @@ def test_writer_append_delegates_to_worksheet() -> None:
     assert len(ws.rows) == 1
     assert ws.rows[0][0] == "2026-04-17"
     assert ws.rows[0][16] == "masuda"  # Q: input_user
+
+
+def test_append_row_uses_a_to_q_table_range() -> None:
+    """Hotfix 2 回帰テスト: append_row に table_range="A:Q" が渡されることを保証する。
+
+    masuda worksheet の col_count=47 成長時に gspread の usedRange 自動検出が
+    誤誘導し、新規記帳が AE〜AU の右方向へ 17 列ドリフトした事故の再発防止。
+    A:Q への pin で append 先テーブルを A〜Q の 17 列に固定する。
+    """
+    ws = FakeWorksheet()
+    writer = LogWriter(ws)
+    writer.append(
+        MoodLogEntry.create(**_valid_kwargs(recorded_at="2026-04-17T07:45:00"))
+    )
+    assert ws.last_table_range == "A:Q"
+
+
+def test_append_row_uses_user_entered() -> None:
+    """Hotfix 2 回帰テスト: value_input_option="USER_ENTERED" が渡されることを保証する。
+
+    RAW 指定だと Sheets 側で日付/数値型の自動解釈が行われず、既存シートの
+    型と不整合が起きる場合がある。USER_ENTERED で GUI 入力と同一解釈にする。
+    """
+    ws = FakeWorksheet()
+    writer = LogWriter(ws)
+    writer.append(
+        MoodLogEntry.create(**_valid_kwargs(recorded_at="2026-04-17T07:45:00"))
+    )
+    assert ws.last_value_input_option == "USER_ENTERED"
 
 
 def test_writer_append_multiple_rows() -> None:
