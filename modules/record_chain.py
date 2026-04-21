@@ -22,6 +22,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Protocol, Tuple
 
+# Hotfix: gspread 6.x 厳格化で空ヘッダー/重複が "duplicates: ['']" として raise
+# されるのをバイパスするため expected_headers を明示する。HEADERS_V12 の定義は
+# devtools 側が単一の真実源。Phase 2 で modules 側へ昇格予定（逆依存を解消する）。
+from devtools.migrate_v1_2 import HEADERS_V12
+
 # Sheets の列番号 (1-based)
 # 列順: A=date … N=record_status, O=superseded_by
 COL_RECORD_STATUS = 14  # N
@@ -83,7 +88,10 @@ def find_active_record(
         raise ValueError(
             f"time_of_day must be 'morning' or 'evening', got {time_of_day!r}"
         )
-    for idx, rec in enumerate(worksheet.get_all_records(), start=2):
+    for idx, rec in enumerate(
+        worksheet.get_all_records(expected_headers=list(HEADERS_V12)),
+        start=2,
+    ):
         if (
             _scope_matches(rec, input_user, date, time_of_day)
             and str(rec.get("record_status", "")) == "active"

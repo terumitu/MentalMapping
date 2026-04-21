@@ -20,13 +20,20 @@ JST = timezone(timedelta(hours=9))
 
 
 class FakeWorksheet:
-    """get_all_records / update_cell を追跡する最小実装。"""
+    """get_all_records / update_cell を追跡する最小実装。
+
+    Hotfix で find_active_record が expected_headers= を渡すようになったため
+    シグネチャ互換のために kwarg を受け取り、最後の指定値を保持する。
+    既存呼び出し（get_revision_chain 等の無引数呼び出し）とも両立させる。
+    """
 
     def __init__(self, records: List[Dict[str, Any]]) -> None:
         self._records = [dict(r) for r in records]
         self.updates: List[Tuple[int, int, Any]] = []
+        self.last_expected_headers: Any = None
 
-    def get_all_records(self) -> List[Dict[str, Any]]:
+    def get_all_records(self, expected_headers: Any = None) -> List[Dict[str, Any]]:
+        self.last_expected_headers = expected_headers
         return [dict(r) for r in self._records]
 
     def update_cell(self, row: int, col: int, value: Any) -> None:
@@ -127,6 +134,25 @@ def test_find_active_record_skips_superseded() -> None:
     ])
     # active が存在しないケース
     assert find_active_record(ws, "masuda", "2026-04-17", "morning") is None
+
+
+def test_find_active_record_passes_expected_headers_v12() -> None:
+    """Hotfix 回帰テスト: find_active_record が get_all_records に
+    expected_headers=list(HEADERS_V12) を明示して渡していることを保証する。
+
+    本番 masuda worksheet の空ヘッダー (col_count=47) 暴露時に gspread 6.x が
+    GSpreadException("duplicates: ['']") を raise した事故の再発防止用。
+    expected_headers 指定で uniqueness チェックがバイパスされる。
+    """
+    from devtools.migrate_v1_2 import HEADERS_V12
+
+    ws = FakeWorksheet([
+        _row(date="2026-04-19", time_of_day="morning",
+             record_id="masuda_2026-04-19_morning_1"),
+    ])
+    find_active_record(ws, "masuda", "2026-04-19", "morning")
+    assert ws.last_expected_headers == list(HEADERS_V12)
+    assert len(ws.last_expected_headers) == 17
 
 
 def test_find_active_record_respects_scope() -> None:

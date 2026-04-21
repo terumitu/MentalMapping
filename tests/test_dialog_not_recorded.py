@@ -33,7 +33,9 @@ class FakeWorksheet:
         self.appends: List[List[Any]] = []
         self.updates: List[Tuple[int, int, Any]] = []
 
-    def get_all_records(self) -> List[Dict[str, Any]]:
+    def get_all_records(self, expected_headers: Any = None) -> List[Dict[str, Any]]:
+        # Hotfix: find_active_record が expected_headers= を渡すのでシグネチャ互換のみ担保。
+        # モック側は値の扱いをせず従来通り全件返却する（テスト挙動を変えない）。
         return [dict(r) for r in self._records]
 
     def append_row(self, row: List[Any]) -> None:
